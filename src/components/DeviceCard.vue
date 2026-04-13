@@ -1,132 +1,90 @@
+<script setup>
+import { computed } from 'vue';
+
+const props = defineProps({
+  title: String,
+  icon: Object,
+  modelValue: Boolean,
+  onText: { type: String, default: 'Đang hoạt động' },
+  offText: { type: String, default: 'Đang tắt' },
+  colorClass: { type: String, default: 'text-blue-400' },
+  activeBgClass: { type: String, default: 'bg-blue-500' }
+});
+
+const emit = defineEmits(['update:modelValue']);
+
+const toggle = () => {
+  emit('update:modelValue', !props.modelValue);
+};
+
+const isHeater = computed(() => props.title.toLowerCase().includes('đèn') || props.title.toLowerCase().includes('sưởi'));
+const isPump = computed(() => props.title.toLowerCase().includes('bơm') || props.title.toLowerCase().includes('tưới'));
+</script>
+
 <template>
-  <el-card 
-    class="device-card transition-all duration-300 transform hover:-translate-y-1 hover:shadow-xl"
-    :body-style="{ padding: '24px' }"
+  <div 
+    class="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-all duration-500"
+    :class="modelValue ? 'shadow-lg shadow-slate-200 ring-1 ring-slate-100' : 'hover:border-slate-300'"
   >
-    <div class="flex items-center justify-between mb-6">
+    <!-- Background Glow for Active State -->
+    <div 
+      v-if="modelValue"
+      :class="[
+        'absolute -right-8 -top-8 h-32 w-32 rounded-full blur-3xl transition-all duration-1000 opacity-10',
+        isHeater ? 'bg-orange-500' : 'bg-blue-500'
+      ]"
+    ></div>
+
+    <div class="flex items-center justify-between relative z-10">
       <div class="flex items-center gap-4">
-        <!-- Icon Container with Dynamic Color -->
+        <!-- Icon Container -->
         <div 
           :class="[
-            'relative p-3 rounded-2xl transition-all duration-500 z-10',
-            modelValue ? 'bg-primary-light text-white shadow-lg shadow-primary-light/30' : 'bg-slate-100 text-slate-400'
+            'relative flex h-14 w-14 items-center justify-center rounded-2xl transition-all duration-500',
+            modelValue ? (isHeater ? 'bg-orange-50/50 text-orange-500 shadow-sm animate-glow' : 'bg-blue-50/50 text-blue-500 shadow-sm') : 'bg-slate-50 text-slate-400'
           ]"
         >
-          <!-- Light Glow Animation -->
-          <div 
-            v-if="modelValue && title.toLowerCase().includes('đèn')"
-            class="absolute inset-0 bg-yellow-400/30 rounded-2xl blur-xl animate-pulse -z-10"
-          ></div>
+          <!-- Ripple effect for Pump -->
+          <div v-if="modelValue && isPump" class="ripple-effect h-full w-full"></div>
           
-          <!-- Water Ripple / Spray Animation -->
-          <div 
-            v-if="modelValue && title.toLowerCase().includes('tưới')"
-            class="absolute inset-0 -z-10"
-          >
-            <div class="water-drop drop-1"></div>
-            <div class="water-drop drop-2"></div>
-            <div class="water-drop drop-3"></div>
-          </div>
-
-          <el-icon :size="28">
-            <component :is="icon" />
-          </el-icon>
+          <component :is="icon" :stroke-width="2.5" class="h-7 w-7 relative z-10" />
         </div>
-        
-        <div class="z-10">
-          <h3 class="text-lg font-bold text-slate-800 m-0">{{ title }}</h3>
-          <p 
-            :class="[
-              'text-sm font-medium mt-1 transition-colors duration-300',
-              modelValue ? 'text-primary' : 'text-slate-400'
-            ]"
-          >
+
+        <div>
+          <h3 class="text-lg font-bold text-slate-900 font-heading">{{ title }}</h3>
+          <p :class="['text-sm font-medium transition-colors duration-300', modelValue ? 'text-slate-600' : 'text-slate-400']">
             {{ modelValue ? onText : offText }}
           </p>
         </div>
       </div>
 
-      <!-- Control Switch -->
-      <el-switch
-        :model-value="modelValue"
-        @update:model-value="$emit('update:modelValue', $event)"
-        class="custom-switch"
-        style="--el-switch-on-color: #4f46e5"
-      />
-    </div>
-
-    <!-- Status Indicator Bar -->
-    <div class="mt-4 h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-      <div 
+      <!-- Custom Toggle -->
+      <button 
+        @click="toggle"
         :class="[
-          'h-full transition-all duration-500 ease-out rounded-full',
-          modelValue ? 'w-full bg-primary' : 'w-0 bg-slate-300'
+          'relative inline-flex h-7 w-12 items-center rounded-full transition-all duration-300 focus:outline-none',
+          modelValue ? activeBgClass : 'bg-slate-200'
         ]"
-      />
+      >
+        <span 
+          :class="[
+            'inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform duration-300',
+            modelValue ? 'translate-x-6' : 'translate-x-1'
+          ]"
+        ></span>
+      </button>
     </div>
-  </el-card>
+
+    <!-- Status Bar -->
+    <div class="mt-6 flex flex-col gap-2 relative z-10">
+      <div class="h-1 w-full overflow-hidden rounded-full bg-slate-100">
+        <div 
+          :class="[
+            'h-full transition-all duration-700 ease-out rounded-full',
+            modelValue ? 'w-full ' + activeBgClass : 'w-0'
+          ]"
+        ></div>
+      </div>
+    </div>
+  </div>
 </template>
-
-<script setup>
-defineProps({
-  title: String,
-  icon: Object,
-  modelValue: Boolean,
-  onText: {
-    type: String,
-    default: 'Đang bật'
-  },
-  offText: {
-    type: String,
-    default: 'Đã tắt'
-  }
-})
-
-defineEmits(['update:modelValue'])
-</script>
-
-<style scoped>
-.device-card {
-  border-radius: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.6);
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(10px);
-}
-
-.custom-switch :deep(.el-switch__core) {
-  height: 24px;
-  border-radius: 12px;
-}
-
-.custom-switch :deep(.el-switch__action) {
-  width: 20px;
-  height: 20px;
-}
-
-/* Water Spray Animation */
-.water-drop {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 6px;
-  height: 6px;
-  background: #3b82f6;
-  border-radius: 50%;
-  opacity: 0;
-  transform: translate(-50%, -50%);
-}
-
-.drop-1 { animation: spray 1.5s infinite; }
-.drop-2 { animation: spray 1.5s infinite 0.5s; }
-.drop-3 { animation: spray 1.5s infinite 1s; }
-
-@keyframes spray {
-  0% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
-  50% { opacity: 0.8; }
-  100% { transform: translate(calc(-50% + (var(--x, 0) * 40px)), calc(-50% + (var(--y, 0) * 40px))) scale(2); opacity: 0; }
-}
-
-.drop-1 { --x: 1; --y: -1; }
-.drop-2 { --x: -1; --y: -1; }
-.drop-3 { --x: 0; --y: -1.5; }
-</style>
