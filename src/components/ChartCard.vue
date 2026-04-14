@@ -25,18 +25,22 @@ const initChart = () => {
     backgroundColor: 'transparent',
     tooltip: {
       trigger: 'axis',
-      backgroundColor: 'rgba(255, 255, 255, 0.9)',
-      borderColor: 'rgba(0, 0, 0, 0.05)',
-      textStyle: { color: '#0f172a' },
+      backgroundColor: 'rgba(255, 255, 255, 0.95)',
+      borderColor: '#e2e8f0',
+      borderWidth: 1,
+      textStyle: { color: '#1e293b', fontSize: 13 },
       axisPointer: {
-        lineStyle: { color: 'rgba(0,0,0,0.05)' }
-      }
+        lineStyle: { color: '#e2e8f0' }
+      },
+      shadowBlur: 10,
+      shadowColor: 'rgba(0,0,0,0.05)'
     },
     legend: {
       data: ['Nhiệt độ', 'Độ ẩm', 'Ánh sáng'],
-      textStyle: { color: '#64748b', fontSize: 12 },
+      textStyle: { color: '#64748b', fontSize: 12, fontWeight: 500 },
       bottom: 0,
-      icon: 'circle'
+      icon: 'circle',
+      padding: [10, 0, 0, 0]
     },
     grid: {
       left: '3%',
@@ -49,26 +53,26 @@ const initChart = () => {
       type: 'category',
       boundaryGap: false,
       data: props.data.timestamps,
-      axisLine: { lineStyle: { color: 'rgba(0,0,0,0.02)' } },
-      axisLabel: { color: '#94a3b8' },
+      axisLine: { lineStyle: { color: '#f1f5f9' } },
+      axisLabel: { color: '#94a3b8', fontSize: 11 },
       splitLine: { show: false }
     },
     yAxis: [
       {
         type: 'value',
         name: '°C / %',
-        nameTextStyle: { color: '#94a3b8' },
+        nameTextStyle: { color: '#94a3b8', fontSize: 11 },
         axisLine: { show: false },
-        axisLabel: { color: '#94a3b8' },
-        splitLine: { lineStyle: { color: 'rgba(0,0,0,0.03)' } }
+        axisLabel: { color: '#94a3b8', fontSize: 11 },
+        splitLine: { lineStyle: { color: '#f1f5f9' } }
       },
       {
         type: 'value',
         name: 'lux',
         position: 'right',
-        nameTextStyle: { color: '#94a3b8' },
+        nameTextStyle: { color: '#94a3b8', fontSize: 11 },
         axisLine: { show: false },
-        axisLabel: { color: '#94a3b8' },
+        axisLabel: { color: '#94a3b8', fontSize: 11 },
         splitLine: { show: false }
       }
     ],
@@ -152,13 +156,13 @@ const handleResize = () => {
 </script>
 
 <template>
-  <div class="rounded-2xl border border-white/5 bg-slate-800/40 p-6 backdrop-blur-xl transition-all duration-300">
+  <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-all duration-300">
     <div class="mb-6 flex items-center justify-between">
       <div class="flex items-center gap-3">
-        <div class="rounded-lg bg-slate-700/50 p-2 text-slate-400">
+        <div class="rounded-lg bg-slate-50 p-2 text-slate-500 border border-slate-100">
           <LineChart class="h-5 w-5" />
         </div>
-        <h2 class="text-xl font-bold text-white font-heading">{{ title }}</h2>
+        <h2 class="text-xl font-bold text-slate-900 font-heading">{{ title }}</h2>
       </div>
       <div class="flex items-center gap-2">
         <span class="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>

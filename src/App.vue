@@ -65,9 +65,38 @@
         <div class="xl:col-span-1 space-y-8">
           <!-- Control Section -->
           <div class="space-y-4">
-            <div class="flex items-center gap-2 text-slate-400 mb-2">
-              <ToggleRight class="h-4 w-4" />
-              <span class="text-xs font-bold uppercase tracking-widest text-slate-400">Thiết bị điều khiển</span>
+            <div class="flex items-center justify-between mb-2">
+              <div class="flex items-center gap-2 text-slate-400">
+                <ToggleRight class="h-4 w-4" />
+                <span class="text-xs font-bold uppercase tracking-widest text-slate-400">Thiết bị điều khiển</span>
+              </div>
+              
+              <!-- Auto Mode Toggle -->
+              <div 
+                class="flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all duration-300"
+                :class="isAutoMode ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 border-slate-100'"
+              >
+                <div class="flex items-center gap-1.5">
+                  <Cpu :class="['h-3.5 w-3.5', isAutoMode ? 'text-emerald-500' : 'text-slate-400']" />
+                  <span :class="['text-[10px] font-bold uppercase tracking-wider', isAutoMode ? 'text-emerald-700' : 'text-slate-500']">
+                    Tự động
+                  </span>
+                </div>
+                <button 
+                  @click="isAutoMode = !isAutoMode"
+                  :class="[
+                    'relative inline-flex h-5 w-9 items-center rounded-full transition-all duration-300 focus:outline-none',
+                    isAutoMode ? 'bg-emerald-500 shadow-sm shadow-emerald-200' : 'bg-slate-200'
+                  ]"
+                >
+                  <span 
+                    :class="[
+                      'inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform duration-300',
+                      isAutoMode ? 'translate-x-4.5' : 'translate-x-1'
+                    ]"
+                  ></span>
+                </button>
+              </div>
             </div>
             <div class="grid grid-cols-1 gap-4">
               <DeviceCard
@@ -77,6 +106,7 @@
                 on-text="Đang sưởi ấm"
                 off-text="Sẵn sàng"
                 active-bg-class="bg-orange-500"
+                :disabled="isAutoMode"
               />
               <DeviceCard
                 v-model="devices.irrigation.isOn"
@@ -85,6 +115,7 @@
                 on-text="Đang tưới nước"
                 off-text="Đã dừng"
                 active-bg-class="bg-blue-600"
+                :disabled="isAutoMode"
               />
             </div>
           </div>
@@ -161,7 +192,7 @@ import { reactive, onMounted, watch, ref } from 'vue'
 import mqtt from 'mqtt'
 import { 
   Leaf, Sun, Droplets, Droplet, Thermometer, Zap, 
-  WifiOff, Calendar, ToggleRight, Activity, Info 
+  WifiOff, Calendar, ToggleRight, Activity, Info, Cpu 
 } from 'lucide-vue-next'
 import DeviceCard from './components/DeviceCard.vue'
 import SensorCard from './components/SensorCard.vue'
@@ -180,6 +211,7 @@ const MQTT_CONFIG = {
 
 const connectionStatus = ref('Disconnected')
 const currentTime = ref(new Date().toLocaleString('vi-VN'))
+const isAutoMode = ref(false)
 let client = null
 
 // Real-time sensor display
@@ -216,24 +248,43 @@ const connectMQTT = () => {
   client.on('connect', () => {
     connectionStatus.value = 'Connected'
     console.log('Connected to MQTT Cloud')
-    client.subscribe(['esp32/nhietdo', 'esp32/doam', 'esp32/anhsang'], (err) => {
-      if (!err) console.log('Subscribed to sensor topics')
+    client.subscribe([
+      'esp32/nhietdo', 'esp32/doam', 'esp32/anhsang',
+      'home/settings/auto', 'home/livingroom/light', 'home/garden/irrigation'
+    ], (err) => {
+      if (!err) console.log('Subscribed to all topics')
     })
   })
 
   client.on('message', (topic, message) => {
-    const val = parseFloat(message.toString())
-    if (isNaN(val)) return
+    // Handle JSON payloads for state sync
+    try {
+      const doc = JSON.parse(message.toString())
+      
+      if (topic === 'home/settings/auto' && doc.auto !== undefined) {
+        isAutoMode.value = doc.auto
+      } else if (!isAutoMode.value) {
+        if (topic === 'home/livingroom/light' && doc.led !== undefined) {
+          devices.light.isOn = doc.led
+        } else if (topic === 'home/garden/irrigation' && doc.water !== undefined) {
+          devices.irrigation.isOn = doc.water
+        }
+      }
+    } catch (e) {
+      // Not JSON, handle as float for sensors
+      const val = parseFloat(message.toString())
+      if (isNaN(val)) return
 
-    if (topic === 'esp32/nhietdo') {
-      sensorData.temperature = val.toFixed(1)
-      addDataPoint('temperature', val)
-    } else if (topic === 'esp32/doam') {
-      sensorData.humidity = val.toFixed(1)
-      addDataPoint('humidity', val)
-    } else if (topic === 'esp32/anhsang') {
-      sensorData.light = val.toFixed(1)
-      addDataPoint('light', val)
+      if (topic === 'esp32/nhietdo') {
+        sensorData.temperature = val.toFixed(1)
+        addDataPoint('temperature', val)
+      } else if (topic === 'esp32/doam') {
+        sensorData.humidity = val.toFixed(1)
+        addDataPoint('humidity', val)
+      } else if (topic === 'esp32/anhsang') {
+        sensorData.light = val.toFixed(1)
+        addDataPoint('light', val)
+      }
     }
   })
 
@@ -255,16 +306,25 @@ const publishEvent = (topic, payload) => {
   }
 }
 
-watch(() => devices.light.isOn, (newVal) => {
-  publishEvent(devices.light.topic, { [devices.light.key]: newVal })
-})
-
-watch(() => devices.irrigation.isOn, (newVal) => {
-  publishEvent(devices.irrigation.topic, { [devices.irrigation.key]: newVal })
-})
+// 3s Heartbeat System
+const startHeartbeat = () => {
+  setInterval(() => {
+    if (client && client.connected) {
+      // Always send auto state
+      publishEvent('home/settings/auto', { auto: isAutoMode.value })
+      
+      // Only send device states if auto is OFF
+      if (!isAutoMode.value) {
+        publishEvent(devices.light.topic, { [devices.light.key]: devices.light.isOn })
+        publishEvent(devices.irrigation.topic, { [devices.irrigation.key]: devices.irrigation.isOn })
+      }
+    }
+  }, 3000)
+}
 
 onMounted(() => {
   connectMQTT()
+  startHeartbeat()
   setInterval(() => {
     currentTime.value = new Date().toLocaleString('vi-VN')
   }, 1000)

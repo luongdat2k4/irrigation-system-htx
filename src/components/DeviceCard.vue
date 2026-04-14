@@ -8,12 +8,14 @@ const props = defineProps({
   onText: { type: String, default: 'Đang hoạt động' },
   offText: { type: String, default: 'Đang tắt' },
   colorClass: { type: String, default: 'text-blue-400' },
-  activeBgClass: { type: String, default: 'bg-blue-500' }
+  activeBgClass: { type: String, default: 'bg-blue-500' },
+  disabled: { type: Boolean, default: false }
 });
 
 const emit = defineEmits(['update:modelValue']);
 
 const toggle = () => {
+  if (props.disabled) return;
   emit('update:modelValue', !props.modelValue);
 };
 
@@ -24,7 +26,10 @@ const isPump = computed(() => props.title.toLowerCase().includes('bơm') || prop
 <template>
   <div 
     class="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-all duration-500"
-    :class="modelValue ? 'shadow-lg shadow-slate-200 ring-1 ring-slate-100' : 'hover:border-slate-300'"
+    :class="[
+      modelValue ? 'shadow-lg shadow-slate-200 ring-1 ring-slate-100' : 'hover:border-slate-300',
+      disabled ? 'opacity-60 grayscale-[0.3]' : ''
+    ]"
   >
     <!-- Background Glow for Active State -->
     <div 
@@ -61,9 +66,11 @@ const isPump = computed(() => props.title.toLowerCase().includes('bơm') || prop
       <!-- Custom Toggle -->
       <button 
         @click="toggle"
+        :disabled="disabled"
         :class="[
           'relative inline-flex h-7 w-12 items-center rounded-full transition-all duration-300 focus:outline-none',
-          modelValue ? activeBgClass : 'bg-slate-200'
+          modelValue ? activeBgClass : 'bg-slate-200',
+          disabled ? 'cursor-not-allowed opacity-50' : ''
         ]"
       >
         <span 
