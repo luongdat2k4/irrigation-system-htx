@@ -201,11 +201,11 @@ import { sensorHistory, addDataPoint } from './utils/sensorStore'
 
 // MQTT Configuration
 const MQTT_CONFIG = {
-  host: '2bc93b5857b249d3988054d99e413b9a.s1.eu.hivemq.cloud',
+  host: 'b47231f3e05d4693806682d3f94b7e9b.s1.eu.hivemq.cloud',
   port: 8884,
   protocol: 'wss',
   username: 'esp32',
-  password: 'Ltdat2004@',
+  password: 'ESP32pass',
   path: '/mqtt'
 }
 
