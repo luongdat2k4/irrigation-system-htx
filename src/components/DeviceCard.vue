@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 const props = defineProps({
   title: String,
@@ -9,10 +9,24 @@ const props = defineProps({
   offText: { type: String, default: 'Đang tắt' },
   colorClass: { type: String, default: 'text-blue-400' },
   activeBgClass: { type: String, default: 'bg-blue-500' },
-  disabled: { type: Boolean, default: false }
+  disabled: { type: Boolean, default: false },
+  lastUpdate: Number
 });
 
 const emit = defineEmits(['update:modelValue']);
+
+const isPulseActive = ref(false);
+
+// Trigger pulse effect on sync
+watch(() => props.modelValue, () => {
+  isPulseActive.value = true;
+  setTimeout(() => isPulseActive.value = false, 1000);
+});
+
+const timeAgo = computed(() => {
+  if (!props.lastUpdate) return 'Chưa đồng bộ';
+  return 'Sync Live';
+});
 
 const toggle = () => {
   if (props.disabled) return;
@@ -28,9 +42,20 @@ const isPump = computed(() => props.title.toLowerCase().includes('bơm') || prop
     class="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-all duration-500"
     :class="[
       modelValue ? 'shadow-lg shadow-slate-200 ring-1 ring-slate-100' : 'hover:border-slate-300',
-      disabled ? 'opacity-60 grayscale-[0.3]' : ''
+      disabled ? 'opacity-60 grayscale-[0.3]' : '',
+      isPulseActive ? 'ring-2 ring-emerald-400' : ''
     ]"
   >
+    <!-- Sync Indicator Badge -->
+    <div class="absolute right-6 top-4 flex items-center gap-1.5 pointer-events-none">
+      <div 
+        :class="[
+          'h-1.5 w-1.5 rounded-full',
+          lastUpdate ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)] animate-pulse' : 'bg-slate-300'
+        ]"
+      ></div>
+      <span class="text-[9px] font-bold uppercase tracking-wider text-slate-400 font-heading">{{ timeAgo }}</span>
+    </div>
     <!-- Background Glow for Active State -->
     <div 
       v-if="modelValue"

@@ -39,10 +39,9 @@ PubSubClient client(espClient);
 
 unsigned long lastMsg = 0;
 float previousLux = 100.0;
-bool isAutoMode = false;
-unsigned long autoPauseEndTime = 0;
-unsigned long pumpEndTime = 0;
-unsigned long lampEndTime = 0;
+bool isAutoMode = true; // Mặc định bật
+unsigned long lampOverrideEndTime = 0;
+unsigned long pumpOverrideEndTime = 0;
 float currentTemp = 0, currentHum = 0;
 
 // --- HÀM XỬ LÝ KHI NHẬN ĐƯỢC DỮ LIỆU MQTT ---
@@ -72,10 +71,10 @@ void callback(char* topic, byte* payload, unsigned int length) {
       bool ledState = doc["led"];
       digitalWrite(LED1_PIN, ledState ? HIGH : LOW);
       Serial.print("=> (MQTT) LED 1: "); Serial.println(ledState ? "BẬT" : "TẮT");
-      // Ghi đè thủ công: Tạm dừng Auto 10s
+      // Ghi đè thủ công: Thiết bị sẽ tự bật lại sau 10s nếu Auto đang bật
       if (isAutoMode) {
-        autoPauseEndTime = millis() + 10000;
-        Serial.println("=> (AUTO) Phát hiện điều khiển thủ công: Tạm dừng Auto 10s");
+        lampOverrideEndTime = millis() + 10000;
+        Serial.println("=> (AUTO) Đã ghi đè thủ công LED 1: Sẽ tự bật lại sau 10s");
       }
     }
   }
@@ -84,10 +83,10 @@ void callback(char* topic, byte* payload, unsigned int length) {
       bool waterState = doc["water"];
       digitalWrite(LED2_PIN, waterState ? HIGH : LOW);
       Serial.print("=> (MQTT) BƠM: "); Serial.println(waterState ? "BẬT" : "TẮT");
-      // Ghi đè thủ công: Tạm dừng Auto 10s
+      // Ghi đè thủ công: Thiết bị sẽ tự bật lại sau 10s nếu Auto đang bật
       if (isAutoMode) {
-        autoPauseEndTime = millis() + 10000;
-        Serial.println("=> (AUTO) Phát hiện điều khiển thủ công: Tạm dừng Auto 10s");
+        pumpOverrideEndTime = millis() + 10000;
+        Serial.println("=> (AUTO) Đã ghi đè thủ công BƠM: Sẽ tự bật lại sau 10s");
       }
     }
   }
@@ -178,16 +177,18 @@ void loop() {
 
   unsigned long now = millis();
 
-  // --- QUẢN LÝ THỜI GIAN TẮT THIẾT BỊ (AUTO) ---
-  if (pumpEndTime > 0 && now > pumpEndTime) {
-    digitalWrite(LED2_PIN, LOW);
-    pumpEndTime = 0;
-    Serial.println("=> (AUTO) Hết 10s: Đã tắt BƠM");
+  // --- QUẢN LÝ TỰ ĐỘNG BẬT LẠI SAU 10S GHI ĐÈ ---
+  if (lampOverrideEndTime > 0 && now > lampOverrideEndTime) {
+    digitalWrite(LED1_PIN, HIGH);
+    lampOverrideEndTime = 0;
+    client.publish(topic_light, "{\"led\": true}");
+    Serial.println("=> (AUTO) Hết 10s ghi đè: Tự động bật lại ĐÈN SƯỞI");
   }
-  if (lampEndTime > 0 && now > lampEndTime) {
-    digitalWrite(LED1_PIN, LOW);
-    lampEndTime = 0;
-    Serial.println("=> (AUTO) Hết 10s: Đã tắt ĐÈN SƯỞI");
+  if (pumpOverrideEndTime > 0 && now > pumpOverrideEndTime) {
+    digitalWrite(LED2_PIN, HIGH);
+    pumpOverrideEndTime = 0;
+    client.publish(topic_water, "{\"water\": true}");
+    Serial.println("=> (AUTO) Hết 10s ghi đè: Tự động bật lại BƠM");
   }
 
   // --- ĐỌC CẢM BIẾN & GỬI MQTT (MỖI 10 GIÂY) ---
@@ -203,26 +204,48 @@ void loop() {
       client.publish("esp32/doam", String(currentHum).c_str());
       client.publish("esp32/anhsang", String(lux).c_str());
       
+      // Đồng bộ trạng thái định kỳ (Real-time Heartbeat)
+      client.publish(topic_light, digitalRead(LED1_PIN) ? "{\"led\": true}" : "{\"led\": false}");
+      client.publish(topic_water, digitalRead(LED2_PIN) ? "{\"water\": true}" : "{\"water\": false}");
+      client.publish(topic_auto, isAutoMode ? "{\"auto\": true}" : "{\"auto\": false}");
+
       Serial.printf("T: %.1f C | H: %.1f %% | L: %.1f lx\n", currentTemp, currentHum, lux);
     }
 
-    // --- LOGIC TỰ ĐỘNG THÔNG MINH ---
+    // --- LOGIC TỰ ĐỘNG THÔNG MINH (THEO ĐỘ TRỄ - HYSTERESIS) ---
     if (isAutoMode) {
-      if (now < autoPauseEndTime) {
-        Serial.println("=> (AUTO) Đang tạm dừng do điều khiển thủ công...");
-      } else {
-        // Kiểm tra độ ẩm và nhiệt độ
-        if (currentHum < 40.0 && pumpEndTime == 0) {
-          digitalWrite(LED2_PIN, HIGH);
-          pumpEndTime = now + 10000;
-          Serial.println("=> (AUTO) Độ ẩm < 40%: Bật BƠM 10s");
-        }
-        
-        if (currentTemp < 35.0 && lampEndTime == 0) {
-          digitalWrite(LED1_PIN, HIGH);
-          lampEndTime = now + 10000;
-          Serial.println("=> (AUTO) Nhiệt độ < 35C: Bật ĐÈN SƯỞI 10s");
-        }
+      // 1. Điều khiển Máy bơm (Độ ẩm)
+      if (pumpOverrideEndTime == 0) { // Chỉ chạy nếu không bị ghi đè thủ công
+          if (currentHum < 40.0) {
+              if (digitalRead(LED2_PIN) == LOW) {
+                  digitalWrite(LED2_PIN, HIGH);
+                  client.publish(topic_water, "{\"water\": true}");
+                  Serial.println("=> (AUTO) Độ ẩm < 40%: Bật BƠM (Liên tục)");
+              }
+          } else if (currentHum > 50.0) {
+              if (digitalRead(LED2_PIN) == HIGH) {
+                  digitalWrite(LED2_PIN, LOW);
+                  client.publish(topic_water, "{\"water\": false}");
+                  Serial.println("=> (AUTO) Độ ẩm > 50%: Tắt BƠM (An toàn)");
+              }
+          }
+      }
+
+      // 2. Điều khiển Đèn sưởi (Nhiệt độ)
+      if (lampOverrideEndTime == 0) {
+          if (currentTemp < 35.0) {
+              if (digitalRead(LED1_PIN) == LOW) {
+                  digitalWrite(LED1_PIN, HIGH);
+                  client.publish(topic_light, "{\"led\": true}");
+                  Serial.println("=> (AUTO) Nhiệt độ < 35C: Bật ĐÈN SƯỞI (Liên tục)");
+              }
+          } else if (currentTemp > 38.0) {
+              if (digitalRead(LED1_PIN) == HIGH) {
+                  digitalWrite(LED1_PIN, LOW);
+                  client.publish(topic_light, "{\"led\": false}");
+                  Serial.println("=> (AUTO) Nhiệt độ > 38C: Tắt ĐÈN SƯỞI (Đủ ấm)");
+              }
+          }
       }
     }
   }

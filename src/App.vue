@@ -80,6 +80,7 @@
                 on-text="Đang sưởi ấm"
                 off-text="Sẵn sàng"
                 active-bg-class="bg-orange-500"
+                :last-update="devices.light.lastUpdate"
               />
               <DeviceCard
                 :model-value="devices.irrigation.isOn"
@@ -89,15 +90,17 @@
                 on-text="Đang tưới nước"
                 off-text="Đã dừng"
                 active-bg-class="bg-blue-600"
+                :last-update="devices.irrigation.lastUpdate"
               />
               <DeviceCard
                 :model-value="devices.auto.isOn"
                 @update:model-value="handleDeviceToggle('auto', $event)"
                 title="Chế độ tự động"
                 :icon="Cpu"
-                :on-text="isAutoPaused ? 'Đang tạm dừng tự động' : 'Đang giám sát'"
+                on-text="Đang giám sát"
                 off-text="Thủ công"
                 active-bg-class="bg-emerald-600"
+                :last-update="devices.auto.lastUpdate"
               />
             </div>
           </div>
@@ -193,8 +196,6 @@ const MQTT_CONFIG = {
 
 const connectionStatus = ref('Disconnected')
 const currentTime = ref(new Date().toLocaleString('vi-VN'))
-const isAutoPaused = ref(false)
-let autoPauseTimer = null
 let client = null
 
 // Real-time sensor display
@@ -209,17 +210,20 @@ const devices = reactive({
   light: {
     isOn: false,
     topic: 'home/livingroom/light',
-    key: 'led'
+    key: 'led',
+    lastUpdate: null
   },
   irrigation: {
     isOn: false,
     topic: 'home/garden/irrigation',
-    key: 'water'
+    key: 'water',
+    lastUpdate: null
   },
   auto: {
     isOn: false,
     topic: 'home/garden/auto',
-    key: 'auto'
+    key: 'auto',
+    lastUpdate: null
   }
 })
 
@@ -271,10 +275,13 @@ const connectMQTT = () => {
       
       if (topic === 'home/livingroom/light' && doc.led !== undefined) {
         devices.light.isOn = doc.led
+        devices.light.lastUpdate = Date.now()
       } else if (topic === 'home/garden/irrigation' && doc.water !== undefined) {
         devices.irrigation.isOn = doc.water
+        devices.irrigation.lastUpdate = Date.now()
       } else if (topic === 'home/garden/auto' && doc.auto !== undefined) {
         devices.auto.isOn = doc.auto
+        devices.auto.lastUpdate = Date.now()
       }
     } catch (e) {
       console.error('MQTT JSON Parse Error:', e, 'Topic:', topic, 'Message:', msgStr)
@@ -302,15 +309,6 @@ const publishEvent = (topic, payload) => {
 const handleDeviceToggle = (deviceKey, newValue) => {
   devices[deviceKey].isOn = newValue
   publishEvent(devices[deviceKey].topic, { [devices[deviceKey].key]: newValue })
-  
-  // If user toggles light or irrigation while auto is on, show pause status
-  if ((deviceKey === 'light' || deviceKey === 'irrigation') && devices.auto.isOn) {
-    isAutoPaused.value = true
-    if (autoPauseTimer) clearTimeout(autoPauseTimer)
-    autoPauseTimer = setTimeout(() => {
-      isAutoPaused.value = false
-    }, 10000)
-  }
 }
 
 onMounted(() => {
