@@ -8,8 +8,8 @@
             <Leaf class="h-6 w-6 text-white" />
           </div>
           <div>
-            <h1 class="text-xl font-bold tracking-tight text-slate-900 font-heading">Smart Irrigation</h1>
-            <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-600">AgriTech Dashboard</p>
+            <h1 class="text-xl font-bold tracking-tight text-slate-900 font-heading">Hệ thống tưới tiêu</h1>
+            <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-600">Bảng điều khiển AgriTech</p>
           </div>
         </div>
 
@@ -70,52 +70,25 @@
                 <ToggleRight class="h-4 w-4" />
                 <span class="text-xs font-bold uppercase tracking-widest text-slate-400">Thiết bị điều khiển</span>
               </div>
-              
-              <!-- Auto Mode Toggle -->
-              <div 
-                class="flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all duration-300"
-                :class="isAutoMode ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 border-slate-100'"
-              >
-                <div class="flex items-center gap-1.5">
-                  <Cpu :class="['h-3.5 w-3.5', isAutoMode ? 'text-emerald-500' : 'text-slate-400']" />
-                  <span :class="['text-[10px] font-bold uppercase tracking-wider', isAutoMode ? 'text-emerald-700' : 'text-slate-500']">
-                    Tự động
-                  </span>
-                </div>
-                <button 
-                  @click="isAutoMode = !isAutoMode"
-                  :class="[
-                    'relative inline-flex h-5 w-9 items-center rounded-full transition-all duration-300 focus:outline-none',
-                    isAutoMode ? 'bg-emerald-500 shadow-sm shadow-emerald-200' : 'bg-slate-200'
-                  ]"
-                >
-                  <span 
-                    :class="[
-                      'inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform duration-300',
-                      isAutoMode ? 'translate-x-4.5' : 'translate-x-1'
-                    ]"
-                  ></span>
-                </button>
-              </div>
             </div>
             <div class="grid grid-cols-1 gap-4">
               <DeviceCard
-                v-model="devices.light.isOn"
+                :model-value="devices.light.isOn"
+                @update:model-value="handleDeviceToggle('light', $event)"
                 title="Đèn sưởi ấm"
                 :icon="Sun"
                 on-text="Đang sưởi ấm"
                 off-text="Sẵn sàng"
                 active-bg-class="bg-orange-500"
-                :disabled="isAutoMode"
               />
               <DeviceCard
-                v-model="devices.irrigation.isOn"
+                :model-value="devices.irrigation.isOn"
+                @update:model-value="handleDeviceToggle('irrigation', $event)"
                 title="Máy bơm nước"
                 :icon="Droplets"
                 on-text="Đang tưới nước"
                 off-text="Đã dừng"
                 active-bg-class="bg-blue-600"
-                :disabled="isAutoMode"
               />
             </div>
           </div>
@@ -192,7 +165,7 @@ import { reactive, onMounted, watch, ref } from 'vue'
 import mqtt from 'mqtt'
 import { 
   Leaf, Sun, Droplets, Droplet, Thermometer, Zap, 
-  WifiOff, Calendar, ToggleRight, Activity, Info, Cpu 
+  WifiOff, Calendar, ToggleRight, Activity, Info 
 } from 'lucide-vue-next'
 import DeviceCard from './components/DeviceCard.vue'
 import SensorCard from './components/SensorCard.vue'
@@ -211,7 +184,6 @@ const MQTT_CONFIG = {
 
 const connectionStatus = ref('Disconnected')
 const currentTime = ref(new Date().toLocaleString('vi-VN'))
-const isAutoMode = ref(false)
 let client = null
 
 // Real-time sensor display
@@ -250,41 +222,44 @@ const connectMQTT = () => {
     console.log('Connected to MQTT Cloud')
     client.subscribe([
       'esp32/nhietdo', 'esp32/doam', 'esp32/anhsang',
-      'home/settings/auto', 'home/livingroom/light', 'home/garden/irrigation'
+      'home/livingroom/light', 'home/garden/irrigation'
     ], (err) => {
       if (!err) console.log('Subscribed to all topics')
     })
   })
 
   client.on('message', (topic, message) => {
-    // Handle JSON payloads for state sync
-    try {
-      const doc = JSON.parse(message.toString())
-      
-      if (topic === 'home/settings/auto' && doc.auto !== undefined) {
-        isAutoMode.value = doc.auto
-      } else if (!isAutoMode.value) {
-        if (topic === 'home/livingroom/light' && doc.led !== undefined) {
-          devices.light.isOn = doc.led
-        } else if (topic === 'home/garden/irrigation' && doc.water !== undefined) {
-          devices.irrigation.isOn = doc.water
+    const msgStr = message.toString()
+    
+    // Handle sensor topics first
+    if (topic.startsWith('esp32/')) {
+      const val = parseFloat(msgStr)
+      if (!isNaN(val)) {
+        if (topic === 'esp32/nhietdo') {
+          sensorData.temperature = val.toFixed(1)
+          addDataPoint('temperature', val)
+        } else if (topic === 'esp32/doam') {
+          sensorData.humidity = val.toFixed(1)
+          addDataPoint('humidity', val)
+        } else if (topic === 'esp32/anhsang') {
+          sensorData.light = val.toFixed(1)
+          addDataPoint('light', val)
         }
       }
-    } catch (e) {
-      // Not JSON, handle as float for sensors
-      const val = parseFloat(message.toString())
-      if (isNaN(val)) return
+      return
+    }
 
-      if (topic === 'esp32/nhietdo') {
-        sensorData.temperature = val.toFixed(1)
-        addDataPoint('temperature', val)
-      } else if (topic === 'esp32/doam') {
-        sensorData.humidity = val.toFixed(1)
-        addDataPoint('humidity', val)
-      } else if (topic === 'esp32/anhsang') {
-        sensorData.light = val.toFixed(1)
-        addDataPoint('light', val)
+    // Handle JSON payloads for state sync
+    try {
+      const doc = JSON.parse(msgStr)
+      
+      if (topic === 'home/livingroom/light' && doc.led !== undefined) {
+        devices.light.isOn = doc.led
+      } else if (topic === 'home/garden/irrigation' && doc.water !== undefined) {
+        devices.irrigation.isOn = doc.water
       }
+    } catch (e) {
+      console.error('MQTT JSON Parse Error:', e, 'Topic:', topic, 'Message:', msgStr)
     }
   })
 
@@ -306,25 +281,13 @@ const publishEvent = (topic, payload) => {
   }
 }
 
-// 3s Heartbeat System
-const startHeartbeat = () => {
-  setInterval(() => {
-    if (client && client.connected) {
-      // Always send auto state
-      publishEvent('home/settings/auto', { auto: isAutoMode.value })
-      
-      // Only send device states if auto is OFF
-      if (!isAutoMode.value) {
-        publishEvent(devices.light.topic, { [devices.light.key]: devices.light.isOn })
-        publishEvent(devices.irrigation.topic, { [devices.irrigation.key]: devices.irrigation.isOn })
-      }
-    }
-  }, 3000)
+const handleDeviceToggle = (deviceKey, newValue) => {
+  devices[deviceKey].isOn = newValue
+  publishEvent(devices[deviceKey].topic, { [devices[deviceKey].key]: newValue })
 }
 
 onMounted(() => {
   connectMQTT()
-  startHeartbeat()
   setInterval(() => {
     currentTime.value = new Date().toLocaleString('vi-VN')
   }, 1000)

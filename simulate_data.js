@@ -1,11 +1,11 @@
 import mqtt from 'mqtt'
 
 const MQTT_CONFIG = {
-  host: '2bc93b5857b249d3988054d99e413b9a.s1.eu.hivemq.cloud',
+  host: 'b47231f3e05d4693806682d3f94b7e9b.s1.eu.hivemq.cloud',
   port: 8883,
   protocol: 'mqtts',
   username: 'esp32',
-  password: 'Ltdat2004@'
+  password: 'ESP32pass'
 }
 
 const url = `${MQTT_CONFIG.protocol}://${MQTT_CONFIG.host}:${MQTT_CONFIG.port}`
